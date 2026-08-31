@@ -70,3 +70,30 @@ def test_prepare_epoch_can_reset_main_optimizer():
 
     assert just_unfroze
     assert len(optimizer.state) == 0
+
+
+def test_prepare_epoch_can_reset_both_optimizers():
+    model = SpeechTokenizer(DummyFrontend(), DummyQuantizer(), freeze_epochs=1)
+    main = torch.optim.Adam(model.parameters(), lr=1e-3)
+    discriminator_param = torch.nn.Parameter(torch.ones(()))
+    discriminator = torch.optim.Adam([discriminator_param], lr=1e-3)
+    for optimizer, parameter in (
+        (main, next(model.parameters())),
+        (discriminator, discriminator_param),
+    ):
+        parameter.grad = torch.ones_like(parameter)
+        optimizer.step()
+        assert len(optimizer.state) > 0
+
+    model.set_epoch(1)
+
+    just_unfroze = SpeechTokenizerGANTrainer.prepare_epoch(
+        model=model,
+        optimizers=[main, discriminator],
+        epoch=2,
+        reset_optimizer_on_unfreeze=True,
+    )
+
+    assert just_unfroze
+    assert len(main.state) == 0
+    assert len(discriminator.state) == 0

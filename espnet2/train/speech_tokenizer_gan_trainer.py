@@ -50,7 +50,7 @@ class SpeechTokenizerGANTrainer(GANTrainer):
             "--reset_optimizer_on_unfreeze",
             type=str2bool,
             default=False,
-            help="Clear main optimizer state when the tokenizer unfreezes.",
+            help="Clear all optimizer states when the tokenizer unfreezes.",
         )
 
     @staticmethod
@@ -88,7 +88,7 @@ class SpeechTokenizerGANTrainer(GANTrainer):
             model: Speech-tokenizer model, optionally DDP-wrapped.
             optimizers: Optimizers whose first element is the main optimizer.
             epoch: One-based epoch about to be trained.
-            reset_optimizer_on_unfreeze: Clear main optimizer state when the
+            reset_optimizer_on_unfreeze: Clear all optimizer states when the
                 tokenizer changes from frozen pretraining to fine-tuning.
 
         Returns:
@@ -99,7 +99,8 @@ class SpeechTokenizerGANTrainer(GANTrainer):
         tokenizer = cls._get_tokenizer(model)
         just_unfroze = tokenizer.set_epoch(epoch)
         if just_unfroze and reset_optimizer_on_unfreeze:
-            optimizers[0].state.clear()
+            for optimizer in optimizers:
+                optimizer.state.clear()
         return just_unfroze
 
     @classmethod
