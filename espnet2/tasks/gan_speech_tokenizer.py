@@ -230,6 +230,34 @@ class GANSpeechTokenizerTask(AbsTask):
         return ASRTask.build_model(asr_args)
 
     @classmethod
+    def _build_asr_objective(
+        cls,
+        args: argparse.Namespace,
+        token_list: List[str],
+        num_tokens: int,
+    ) -> ASRObjective:
+        """Build the ASR token embedding and objective."""
+        embedding_conf = dict(args.asr_embedding_conf)
+        embedding_conf.pop("input_size", None)
+        embedding = TokenEmbedding(input_size=num_tokens, **embedding_conf)
+        asr_model = cls._build_asr_model(args, token_list, embedding.output_size())
+        return ASRObjective(asr_model, embedding)
+
+    @classmethod
+    def _build_reconstruction_objective(
+        cls,
+        args: argparse.Namespace,
+        num_tokens: int,
+    ) -> HiFiGANReconstructionObjective:
+        """Build the configured waveform-reconstruction objective."""
+        reconstruction_conf = dict(args.reconstruction_objective_conf)
+        reconstruction_conf.pop("num_tokens", None)
+        objective_class = reconstruction_objective_choices.get_class(
+            args.reconstruction_objective
+        )
+        return objective_class(num_tokens=num_tokens, **reconstruction_conf)
+
+    @classmethod
     @typechecked
     def build_model(cls, args: argparse.Namespace) -> ESPnetGANSpeechTokenizerModel:
         """Assemble the shared tokenizer and both downstream objectives."""
@@ -240,23 +268,16 @@ class GANSpeechTokenizerTask(AbsTask):
         quantizer = quantizer_choices.get_class(args.quantizer)(**args.quantizer_conf)
         tokenizer = SpeechTokenizer(frontend, quantizer, **args.tokenizer_conf)
 
-        embedding_conf = dict(args.asr_embedding_conf)
-        embedding_conf.pop("input_size", None)
-        asr_embedding = TokenEmbedding(
-            input_size=quantizer.num_clusters, **embedding_conf
+        asr_objective = cls._build_asr_objective(
+            args, token_list, quantizer.num_clusters
         )
-        asr_model = cls._build_asr_model(args, token_list, asr_embedding.output_size())
-        asr_objective = ASRObjective(asr_model, asr_embedding)
-
-        reconstruction_conf = dict(args.reconstruction_objective_conf)
-        reconstruction_conf.pop("num_tokens", None)
-        reconstruction = reconstruction_objective_choices.get_class(
-            args.reconstruction_objective
-        )(num_tokens=quantizer.num_clusters, **reconstruction_conf)
+        reconstruction_objective = cls._build_reconstruction_objective(
+            args, quantizer.num_clusters
+        )
         return ESPnetGANSpeechTokenizerModel(
             tokenizer=tokenizer,
             asr_objective=asr_objective,
-            reconstruction_objective=reconstruction,
+            reconstruction_objective=reconstruction_objective,
             **args.model_conf,
         )
 
