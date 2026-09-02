@@ -17,7 +17,7 @@ frontend_conf:
 quantizer: differentiable_kmeans
 quantizer_conf:
     # centroid_path is supplied from the stage 7 output by speech_tokenizer.sh.
-    distance_type: squared_euclidean
+    distance_type: euclidean
     sigma_squared: 1.0
     temperature_init: 2.0
     temperature_floor: 0.1
