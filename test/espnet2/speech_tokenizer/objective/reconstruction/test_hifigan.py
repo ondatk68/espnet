@@ -75,7 +75,7 @@ def make_tokenizer_output():
     )
 
 
-def test_synthesize_concatenates_speaker_embedding():
+def test_synthesize():
     objective = make_objective()
     tokenizer_output = make_tokenizer_output()
 
