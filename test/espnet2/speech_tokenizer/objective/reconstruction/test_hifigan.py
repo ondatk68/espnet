@@ -78,9 +78,19 @@ def make_tokenizer_output():
 def test_synthesize():
     objective = make_objective()
     tokenizer_output = make_tokenizer_output()
+    spembs = torch.ones(1, 2)
+
+    condition = objective._prepare_condition(tokenizer_output, spembs)
+    token_features = torch.matmul(
+        tokenizer_output.assignment.detach(), objective.embedding.embed.weight.detach()
+    )
+    expected_condition = torch.cat(
+        [token_features, spembs.unsqueeze(1).expand(-1, 5, -1)], dim=-1
+    ).transpose(1, 2)
+    torch.testing.assert_close(condition.detach(), expected_condition)
 
     waveform, waveform_lengths = objective.synthesize(
-        tokenizer_output, spembs=torch.ones(1, 2)
+        tokenizer_output, spembs=spembs
     )
 
     assert waveform.shape == (1, 1, 10)
@@ -96,6 +106,7 @@ def test_generator_and_discriminator_losses_with_cache():
     generator_loss, _, _ = objective(tokenizer_output, speech, spembs)
     generator_loss.backward()
     assert tokenizer_output.assignment.grad is not None
+    assert torch.count_nonzero(tokenizer_output.assignment.grad) > 0
     assert objective._cache is not None
 
     for parameter in objective.parameters():

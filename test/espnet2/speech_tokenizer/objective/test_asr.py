@@ -11,15 +11,15 @@ class DummyASRModel(torch.nn.Module):
         super().__init__()
         self.frontend = frontend
         self.projection = torch.nn.Linear(3, 1)
-        self.last_speech = None
+        self.last_input_features = None
 
     def forward(self, speech, speech_lengths, text, text_lengths, **kwargs):
-        self.last_speech = speech
+        self.last_input_features = speech
         loss = self.projection(speech).square().mean()
         return loss, {"loss": loss.detach()}, speech.size(0)
 
     def encode(self, speech, speech_lengths):
-        self.last_speech = speech
+        self.last_input_features = speech
         return self.projection(speech), speech_lengths
 
 
@@ -49,8 +49,9 @@ def test_forward_embeds_assignments_and_preserves_gradient():
     )
     loss.backward()
 
+    # Forward uses the hard assignment, while backward still reaches it.
     expected = torch.matmul(assignment.detach(), embedding.embed.weight.detach())
-    torch.testing.assert_close(asr_model.last_speech.detach(), expected)
+    torch.testing.assert_close(asr_model.last_input_features.detach(), expected)
     assert assignment.grad is not None
     assert torch.count_nonzero(assignment.grad) > 0
     assert "loss" in stats
