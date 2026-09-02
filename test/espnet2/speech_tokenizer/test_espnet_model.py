@@ -32,8 +32,13 @@ class DummyTokenizer(torch.nn.Module):
 
 
 class DummyASRObjective(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.last_loss = None
+
     def forward(self, tokenizer_output, **batch):
         loss = tokenizer_output.assignment[..., 0].mean()
+        self.last_loss = loss.detach()
         return loss, {"loss": loss.detach()}, tokenizer_output.assignment.size(0)
 
     def encode(self, tokenizer_output):
@@ -46,10 +51,12 @@ class DummyReconstructionObjective(torch.nn.Module):
         self.discriminator = torch.nn.Linear(1, 1)
         self.has_cached_generator_outputs = False
         self.last_discriminator_tokenizer_output = None
+        self.last_loss = None
 
     def forward(self, tokenizer_output, **batch):
         self.has_cached_generator_outputs = True
-        loss = 2.0 * tokenizer_output.assignment[..., 1].mean()
+        loss = tokenizer_output.assignment[..., 1].mean()
+        self.last_loss = loss.detach()
         return loss, {"loss": loss.detach()}, tokenizer_output.assignment.size(0)
 
     def forward_discriminator(self, tokenizer_output, speech, **batch):
@@ -82,10 +89,13 @@ def test_generator_combines_objectives_and_tokenizes_once():
         forward_generator=True,
     )
 
-    assignment = torch.softmax(model.tokenizer.logits, dim=0)
-    expected = 0.75 * assignment[0] + 0.25 * 2.0 * assignment[1]
+    expected = (
+        0.75 * model.asr_objective.last_loss
+        + 0.25 * model.reconstruction_objective.last_loss
+    )
     torch.testing.assert_close(result["loss"], expected[None])
     assert result["optim_idx"] == 0
+    # ASR and reconstruction must share one tokenizer forward pass.
     assert model.tokenizer.forward_calls == 1
     assert "asr_loss" in result["stats"]
     assert "reconstruction_loss" in result["stats"]
@@ -107,7 +117,9 @@ def test_discriminator_uses_cache_without_running_tokenizer():
     result = model(forward_generator=False, **inputs)
 
     assert result["optim_idx"] == 1
+    # The generator already ran the tokenizer, so the cache avoids another call.
     assert model.tokenizer.forward_calls == 1
+    # Cached waveforms let the discriminator run without tokenizer outputs.
     assert model.reconstruction_objective.last_discriminator_tokenizer_output is None
     assert "reconstruction_discriminator_loss" in result["stats"]
 
@@ -122,7 +134,9 @@ def test_discriminator_tokenizes_on_cache_miss():
     )
 
     assert result["optim_idx"] == 1
+    # A cache miss requires tokenization for waveform generation.
     assert model.tokenizer.forward_calls == 1
+    # The freshly computed tokenizer output is passed to the discriminator path.
     assert (
         model.reconstruction_objective.last_discriminator_tokenizer_output is not None
     )
@@ -157,4 +171,5 @@ def test_inference_interfaces_use_deterministic_tokenizer():
     torch.testing.assert_close(encoded_lengths, lengths)
     assert waveform.shape == (1, 1, 1)
     torch.testing.assert_close(waveform_lengths, lengths)
+    # Each public inference interface independently calls tokenizer.encode().
     assert model.tokenizer.encode_calls == 3
