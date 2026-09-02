@@ -24,8 +24,6 @@ class TokenEmbedding(AbsFrontend):
         input_size: Number of input tokens ``K``.
         embed_dim: Embedding dimension.
         use_positional_encoding: Apply positional encoding after embedding.
-            This is normally enabled for ASR and can be disabled for a
-            reconstruction generator that handles temporal structure itself.
         pos_enc_class: Positional-encoding class.  It must accept the embedding
             dimension and dropout rate as its first two arguments.
         positional_dropout_rate: Dropout rate used by positional encoding.
