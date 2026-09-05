@@ -1,1 +1,0 @@
-../../TEMPLATE/speech_tokenizer1/speech_tokenizer.sh
